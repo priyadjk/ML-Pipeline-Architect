@@ -1,0 +1,6 @@
+{
+  "name": "Kaggle Vibe Agent",
+  "description": "An interactive agent-driven workspace that generates production-ready Kaggle competition solutions, analyzes datasets, and simulates data science strategies using a collaborative multi-agent architecture.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
