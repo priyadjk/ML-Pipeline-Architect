@@ -35,6 +35,8 @@ interface CompetitionTemplate {
   columns: Array<{ name: string; type: string; missing: string; importance: number }>;
   baselineScore: number;
   bestScore: number;
+  downloads?: number;
+  likes?: number;
 }
 
 const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
@@ -116,12 +118,46 @@ const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
 export default function KaggleVibeAgent() {
   const [mounted, setMounted] = useState(false);
   
+  const fetchLiveDatasets = async () => {
+    setIsFetchingLive(true);
+    setLiveFetchError(null);
+    try {
+      const response = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "fetch_live_datasets" }),
+      });
+      const data = await response.json();
+      if (data.success && data.datasets) {
+        setLiveDatasets(data.datasets);
+      } else if (data.datasets) {
+        // Fallback returned but with warn/error message
+        setLiveDatasets(data.datasets);
+        setLiveFetchError(data.error || "Using cached dynamic datasets.");
+      } else {
+        throw new Error(data.error || "Failed to retrieve datasets.");
+      }
+    } catch (err: any) {
+      console.error("Error fetching live datasets:", err);
+      setLiveFetchError("Offline / Service unavailable. Using local templates.");
+    } finally {
+      setIsFetchingLive(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
+    fetchLiveDatasets();
   }, []);
 
   // App states
   const [selectedTemplate, setSelectedTemplate] = useState<CompetitionTemplate>(COMPETITION_TEMPLATES[0]);
+  
+  // Live dataset states
+  const [liveDatasets, setLiveDatasets] = useState<CompetitionTemplate[]>([]);
+  const [isFetchingLive, setIsFetchingLive] = useState(false);
+  const [liveFetchError, setLiveFetchError] = useState<string | null>(null);
+  const [isLiveMode, setIsLiveMode] = useState(false);
   
   // Custom form state
   const [customTitle, setCustomTitle] = useState(COMPETITION_TEMPLATES[0].title);
@@ -558,32 +594,124 @@ print("Ready to develop elite solution.")
                 <Database className="w-4 h-4 text-[#00FF41]" />
                 <h2 className="text-xs font-bold text-white uppercase tracking-wider font-mono">1. Problem Definition</h2>
               </div>
-              <span className="text-[9px] text-[#00FF41]/60 uppercase font-mono tracking-wider">Kaggle API Seed</span>
+              <span className="text-[9px] text-[#00FF41]/60 uppercase font-mono tracking-wider">
+                {isLiveMode ? "Hugging Face Live" : "Kaggle API Seed"}
+              </span>
+            </div>
+
+            {/* Toggle Mode Tab */}
+            <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 gap-1">
+              <button
+                onClick={() => {
+                  setIsLiveMode(false);
+                  setSelectedTemplate(COMPETITION_TEMPLATES[0]);
+                }}
+                className={`flex-1 text-center py-1.5 rounded-md text-[9px] font-bold tracking-wider uppercase font-mono transition duration-200 ${
+                  !isLiveMode 
+                    ? "bg-[#00FF41]/10 text-[#00FF41] border border-[#00FF41]/20" 
+                    : "text-white/40 hover:text-white"
+                }`}
+              >
+                🏆 Kaggle Classics
+              </button>
+              <button
+                onClick={() => {
+                  setIsLiveMode(true);
+                  if (liveDatasets.length > 0) {
+                    setSelectedTemplate(liveDatasets[0]);
+                  } else {
+                    fetchLiveDatasets();
+                  }
+                }}
+                className={`flex-1 text-center py-1.5 rounded-md text-[9px] font-bold tracking-wider uppercase font-mono transition duration-200 flex items-center justify-center gap-1 ${
+                  isLiveMode 
+                    ? "bg-[#00FF41]/10 text-[#00FF41] border border-[#00FF41]/20" 
+                    : "text-white/40 hover:text-white"
+                }`}
+              >
+                <Sparkles className="w-3 h-3 text-[#00FF41]" />
+                🔥 HF Live Trends
+              </button>
             </div>
 
             {/* Template Buttons */}
             <div>
-              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 block">
-                Select Competition Template
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {COMPETITION_TEMPLATES.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    onClick={() => setSelectedTemplate(tpl)}
-                    className={`text-left px-3 py-2 rounded-lg text-xs transition duration-200 border flex flex-col gap-1 ${
-                      selectedTemplate.id === tpl.id
-                        ? "bg-[#00FF41]/10 border-[#00FF41]/40 text-[#00FF41] shadow-md shadow-[#00FF41]/5"
-                        : "bg-black/40 border-white/5 hover:border-white/20 text-white/50 hover:text-white"
-                    }`}
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest block">
+                  {isLiveMode ? "Trending HF Datasets (Live)" : "Select Competition Template"}
+                </label>
+                {isLiveMode && (
+                  <button 
+                    onClick={fetchLiveDatasets}
+                    disabled={isFetchingLive}
+                    className="text-[9px] font-mono text-[#00FF41] flex items-center gap-1 hover:underline disabled:opacity-50"
                   >
-                    <span className="font-semibold truncate font-mono text-[11px]">
-                      {tpl.id === "titanic" ? "Titanic" : tpl.id === "spaceship_titanic" ? "Spaceship Titanic" : tpl.id === "house_prices" ? "House Prices" : "Store Sales"}
-                    </span>
-                    <span className="text-[9px] opacity-60 truncate">{tpl.problemType}</span>
+                    <RefreshCw className={`w-2.5 h-2.5 ${isFetchingLive ? "animate-spin" : ""}`} />
+                    Refresh Feed
                   </button>
-                ))}
+                )}
               </div>
+
+              {isLiveMode ? (
+                isFetchingLive ? (
+                  <div className="py-8 flex flex-col items-center justify-center gap-2 bg-black/20 border border-white/5 rounded-lg">
+                    <RefreshCw className="w-5 h-5 text-[#00FF41] animate-spin" />
+                    <span className="text-[9px] text-white/40 uppercase tracking-widest animate-pulse font-mono">
+                      Querying live trending datasets...
+                    </span>
+                  </div>
+                ) : liveFetchError && liveDatasets.length === 0 ? (
+                  <div className="py-4 text-center text-xs text-red-400 font-mono">
+                    {liveFetchError}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {liveDatasets.map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        onClick={() => setSelectedTemplate(tpl)}
+                        className={`text-left px-3 py-2 rounded-lg text-xs transition duration-200 border flex flex-col gap-1 ${
+                          selectedTemplate.id === tpl.id
+                            ? "bg-[#00FF41]/10 border-[#00FF41]/40 text-[#00FF41] shadow-md shadow-[#00FF41]/5"
+                            : "bg-black/40 border-white/5 hover:border-white/20 text-white/50 hover:text-white"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-semibold truncate font-mono text-[11px] max-w-[70%]">
+                            {tpl.title.replace(" (HF Live)", "")}
+                          </span>
+                          <span className="text-[9px] text-[#00FF41] font-mono opacity-80">
+                            {tpl.downloads ? `↓ ${(tpl.downloads / 1000).toFixed(1)}k` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between w-full opacity-60 text-[9px]">
+                          <span>{tpl.problemType}</span>
+                          <span className="font-mono">♥ {tpl.likes || 0}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {COMPETITION_TEMPLATES.map((tpl) => (
+                    <button
+                      key={tpl.id}
+                      onClick={() => setSelectedTemplate(tpl)}
+                      className={`text-left px-3 py-2 rounded-lg text-xs transition duration-200 border flex flex-col gap-1 ${
+                        selectedTemplate.id === tpl.id
+                          ? "bg-[#00FF41]/10 border-[#00FF41]/40 text-[#00FF41] shadow-md shadow-[#00FF41]/5"
+                          : "bg-black/40 border-white/5 hover:border-white/20 text-white/50 hover:text-white"
+                      }`}
+                    >
+                      <span className="font-semibold truncate font-mono text-[11px]">
+                        {tpl.id === "titanic" ? "Titanic" : tpl.id === "spaceship_titanic" ? "Spaceship Titanic" : tpl.id === "house_prices" ? "House Prices" : "Store Sales"}
+                      </span>
+                      <span className="text-[9px] opacity-60 truncate">{tpl.problemType}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Title & Goal inputs */}
